@@ -1382,7 +1382,9 @@ def get_user_by_contact(email_address: str, mobile_number: str) -> dict | None:
     conn.close()
     normalized_mobile = normalize_mobile_number(mobile_number)
     for user in users:
-        if normalize_mobile_number(user["resident_mobile"] or "") == normalized_mobile:
+        owner_mobile = normalize_mobile_number(user["resident_mobile"] or "")
+        login_mobile = normalize_mobile_number(user["username"] or "")
+        if normalized_mobile and normalized_mobile in {owner_mobile, login_mobile}:
             user_data = dict(user)
             user_data.pop("resident_mobile", None)
             return user_data
