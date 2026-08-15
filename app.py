@@ -292,8 +292,17 @@ def init_db() -> None:
                 (apartment_id,),
             )
 
+    apartment_ids = [
+        row["apartment_id"]
+        for row in conn.execute(
+            "SELECT DISTINCT apartment_id FROM units WHERE apartment_id IS NOT NULL"
+        ).fetchall()
+    ]
     conn.commit()
     conn.close()
+
+    for apartment_id in apartment_ids:
+        create_unit_accounts(int(apartment_id))
 
 
 def get_user_apartment_id(user_id: int | None) -> int | None:
