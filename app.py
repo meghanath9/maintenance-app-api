@@ -99,14 +99,21 @@ def migrate_units_table_if_needed(conn: sqlite3.Connection) -> None:
             unit_id INTEGER PRIMARY KEY AUTOINCREMENT,
             unit_number TEXT NOT NULL,
             resident_name TEXT NOT NULL,
+            resident_mobile TEXT NOT NULL DEFAULT '',
+            resident_email TEXT NOT NULL DEFAULT '',
             tenant_name TEXT,
+            tenant_mobile TEXT NOT NULL DEFAULT '',
+            tenant_email TEXT NOT NULL DEFAULT '',
             monthly_maintenance REAL NOT NULL,
             apartment_id INTEGER,
             FOREIGN KEY (apartment_id) REFERENCES apartments(apartment_id)
         );
 
-        INSERT INTO units (unit_id, unit_number, resident_name, tenant_name, monthly_maintenance, apartment_id)
-        SELECT unit_id, unit_number, resident_name, NULL, monthly_maintenance, apartment_id
+        INSERT INTO units (
+            unit_id, unit_number, resident_name, resident_mobile, resident_email,
+            tenant_name, tenant_mobile, tenant_email, monthly_maintenance, apartment_id
+        )
+        SELECT unit_id, unit_number, resident_name, '', '', NULL, '', '', monthly_maintenance, apartment_id
         FROM units_old;
 
         DROP TABLE units_old;
@@ -242,6 +249,10 @@ def init_db() -> None:
     ensure_column(conn, "apartments", "default_maintenance_amount", "REAL NOT NULL DEFAULT 0")
     ensure_column(conn, "apartments", "opening_balance", "REAL NOT NULL DEFAULT 0")
     migrate_units_table_if_needed(conn)
+    ensure_column(conn, "units", "resident_mobile", "TEXT NOT NULL DEFAULT ''")
+    ensure_column(conn, "units", "resident_email", "TEXT NOT NULL DEFAULT ''")
+    ensure_column(conn, "units", "tenant_mobile", "TEXT NOT NULL DEFAULT ''")
+    ensure_column(conn, "units", "tenant_email", "TEXT NOT NULL DEFAULT ''")
 
     legacy_name = cur.execute(
         "SELECT setting_value FROM app_settings WHERE setting_key = 'apartment_name'"
@@ -1492,27 +1503,25 @@ def get_user_by_contact(email_address: str, mobile_number: str) -> dict | None:
     users = conn.execute(
         """
         SELECT DISTINCT usr.user_id, usr.username, usr.display_name, usr.role, usr.apartment_id,
-            usr.unit_id, unit.resident_mobile, unit.tenant_mobile
+            usr.unit_id,
+            CASE WHEN usr.role = 'tenant' THEN unit.tenant_mobile ELSE unit.resident_mobile END AS contact_mobile
         FROM users AS usr
-        LEFT JOIN apartments AS apt ON apt.owner_user_id = usr.user_id
-        LEFT JOIN units AS unit ON unit.unit_id = usr.unit_id OR (
-            usr.unit_id IS NULL AND unit.apartment_id = apt.apartment_id
-        )
+        LEFT JOIN apartments AS apt ON apt.apartment_id = usr.apartment_id
+        LEFT JOIN units AS unit ON unit.unit_id = usr.unit_id
+            OR (usr.role = 'admin' AND unit.apartment_id = apt.apartment_id)
         WHERE (
-            lower(trim(unit.resident_email)) = ?
-            OR lower(trim(unit.tenant_email)) = ?
-            OR lower(trim(usr.username)) = ?
+            (usr.role IN ('admin', 'unit_owner') AND lower(trim(unit.resident_email)) = ?)
+            OR (usr.role = 'tenant' AND lower(trim(unit.tenant_email)) = ?)
         )
         """,
-        (email_address.lower().strip(), email_address.lower().strip(), email_address.lower().strip()),
+        (email_address.lower().strip(), email_address.lower().strip()),
     ).fetchall()
     conn.close()
     normalized_mobile = normalize_mobile_number(mobile_number)
     for user in users:
-        owner_mobile = normalize_mobile_number(user["resident_mobile"] or "")
-        tenant_mobile = normalize_mobile_number(user["tenant_mobile"] or "")
+        contact_mobile = normalize_mobile_number(user["contact_mobile"] or "")
         login_mobile = normalize_mobile_number(user["username"] or "")
-        if normalized_mobile and normalized_mobile in {owner_mobile, tenant_mobile, login_mobile}:
+        if normalized_mobile and normalized_mobile in {contact_mobile, login_mobile}:
             user_data = dict(user)
             user_data.pop("resident_mobile", None)
             return user_data
@@ -2202,9 +2211,11 @@ def dashboard():
 
     is_owner = is_apartment_owner(session.get("user_id"), apartment_id)
     unit_id = get_user_unit_id(session.get("user_id"))
+    if not is_owner and unit_id is None:
+        return jsonify({"error": "This account is not linked to a unit"}), 403
     summary = (
         month_summary(month, year, apartment_id)
-        if is_owner or unit_id is None
+        if is_owner
         else unit_summary(month, year, apartment_id, unit_id)
     )
     return render_template(
@@ -2780,11 +2791,10 @@ def api_summary(year: int, month: int):
         )
 
     unit_id = get_user_unit_id(session.get("user_id"))
-    payload = (
-        month_summary(month, year, apartment_id)
-        if is_apartment_owner(session.get("user_id"), apartment_id) or unit_id is None
-        else unit_summary(month, year, apartment_id, unit_id)
-    )
+    is_owner = is_apartment_owner(session.get("user_id"), apartment_id)
+    if not is_owner and unit_id is None:
+        return jsonify({"error": "This account is not linked to a unit"}), 403
+    payload = month_summary(month, year, apartment_id) if is_owner else unit_summary(month, year, apartment_id, unit_id)
     payload["apartment_name"] = get_apartment_name_by_id(apartment_id)
     return jsonify(payload)
 
