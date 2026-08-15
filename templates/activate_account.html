@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Activate Account - Maintenance Finance</title>
+  <style>
+    :root { --bg: #edf4f1; --panel: #fff; --ink: #20302d; --muted: #60716d; --line: #d8e4df; --accent: #16745b; --danger: #b42318; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: linear-gradient(135deg, #edf4f1, #f8f3e8); font-family: "Segoe UI", sans-serif; color: var(--ink); }
+    .box { width: 100%; max-width: 420px; padding: 22px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 8px 28px rgba(32, 48, 45, .1); }
+    h1 { margin: 0 0 8px; font-size: 1.45rem; }
+    p { margin: 0 0 18px; color: var(--muted); font-size: .9rem; line-height: 1.45; }
+    label { display: block; margin: 13px 0 6px; font-weight: 600; }
+    input { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 9px; font-size: .95rem; }
+    button { width: 100%; margin-top: 18px; padding: 10px; border: 0; border-radius: 9px; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; }
+    .error, .message { margin-top: 12px; padding: 10px; border-radius: 8px; font-size: .88rem; font-weight: 600; }
+    .error { color: var(--danger); background: #fee2e2; } .message { color: #12604e; background: #d9f5e9; }
+    .hint { margin-top: 14px; color: var(--muted); font-size: .85rem; } a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <form class="box" method="post" action="/activate-account">
+    {% if step == 'contact' %}
+      <h1>Activate Unit Account</h1>
+      <p>Enter the email and mobile number provided by the apartment admin.</p>
+      <label for="email_address">Email Address</label>
+      <input id="email_address" name="email_address" type="email" value="{{ email_address or '' }}" required autofocus />
+      <label for="mobile_number">Mobile Number</label>
+      <input id="mobile_number" name="mobile_number" type="tel" value="{{ mobile_number or '' }}" required />
+      <input type="hidden" name="step" value="contact" />
+      <button type="submit">Send Activation OTP</button>
+    {% elif step == 'otp' %}
+      <h1>Verify Activation OTP</h1>
+      <p>Enter the OTP sent to {{ email_address }}.</p>
+      <label for="otp_code">One-Time Password</label>
+      <input id="otp_code" name="otp_code" type="text" inputmode="numeric" maxlength="6" required autofocus />
+      <input type="hidden" name="step" value="otp" />
+      <button type="submit">Verify OTP</button>
+    {% else %}
+      <h1>Create Password</h1>
+      <p>Your account is verified. Create a password to finish activation.</p>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" minlength="4" required autofocus />
+      <label for="confirm_password">Confirm Password</label>
+      <input id="confirm_password" name="confirm_password" type="password" minlength="4" required />
+      <input type="hidden" name="step" value="password" />
+      <button type="submit">Activate Account</button>
+    {% endif %}
+    {% if message %}<div class="message">{{ message }}</div>{% endif %}
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <div class="hint"><a href="/login">Back to login</a></div>
+  </form>
+</body>
+</html>

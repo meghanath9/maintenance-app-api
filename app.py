@@ -138,7 +138,10 @@ def init_db() -> None:
             display_name TEXT NOT NULL,
             role TEXT NOT NULL,
             apartment_id INTEGER,
+            unit_id INTEGER,
+            account_status TEXT NOT NULL DEFAULT 'active',
             FOREIGN KEY (apartment_id) REFERENCES apartments(apartment_id)
+            ,FOREIGN KEY (unit_id) REFERENCES units(unit_id)
         );
 
         CREATE TABLE IF NOT EXISTS units (
@@ -223,6 +226,8 @@ def init_db() -> None:
 
     # Migration support for older schema versions.
     ensure_column(conn, "users", "apartment_id", "INTEGER")
+    ensure_column(conn, "users", "unit_id", "INTEGER")
+    ensure_column(conn, "users", "account_status", "TEXT NOT NULL DEFAULT 'active'")
     ensure_column(conn, "units", "apartment_id", "INTEGER")
     ensure_column(conn, "units", "tenant_name", "TEXT")
     ensure_column(conn, "units", "resident_mobile", "TEXT NOT NULL DEFAULT ''")
@@ -463,6 +468,65 @@ def create_user(username: str, password: str, display_name: str, role: str = "ad
     conn.commit()
     conn.close()
     return int(cursor.lastrowid)
+
+
+def create_unit_accounts(apartment_id: int) -> None:
+    """Create pending owner and tenant accounts for the apartment's units."""
+    conn = get_conn()
+    units = conn.execute(
+        """
+        SELECT unit_id, resident_name, resident_mobile, resident_email,
+            tenant_name, tenant_mobile, tenant_email
+        FROM units
+        WHERE apartment_id = ?
+        """,
+        (apartment_id,),
+    ).fetchall()
+    for unit in units:
+        account_specs = [
+            (unit["resident_email"], unit["resident_mobile"], unit["resident_name"], "unit_owner"),
+            (unit["tenant_email"], unit["tenant_mobile"], unit["tenant_name"], "tenant"),
+        ]
+        for email, mobile, display_name, role in account_specs:
+            email = (email or "").strip().lower()
+            if not email or not display_name or not mobile:
+                continue
+            existing = conn.execute(
+                "SELECT user_id FROM users WHERE username = ?",
+                (email,),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET display_name = ?, apartment_id = ?, unit_id = ?, role = ?
+                    WHERE user_id = ?
+                    """,
+                    (display_name, apartment_id, unit["unit_id"], role, existing["user_id"]),
+                )
+                continue
+            conn.execute(
+                """
+                INSERT INTO users (
+                    username, password, display_name, role, apartment_id, unit_id, account_status
+                ) VALUES (?, ?, ?, ?, ?, ?, 'pending')
+                """,
+                (email, secrets.token_urlsafe(24), display_name, role, apartment_id, unit["unit_id"]),
+            )
+    conn.commit()
+    conn.close()
+
+
+def get_user_unit_id(user_id: int | None) -> int | None:
+    if not user_id:
+        return None
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT unit_id FROM users WHERE user_id = ? AND role IN ('unit_owner', 'tenant')",
+        (user_id,),
+    ).fetchone()
+    conn.close()
+    return int(row["unit_id"]) if row and row["unit_id"] is not None else None
 
 
 def create_apartment(apartment_name: str, owner_user_id: int) -> int:
@@ -925,9 +989,9 @@ def validate_user(username: str, password: str) -> sqlite3.Row | None:
     conn = get_conn()
     row = conn.execute(
         """
-        SELECT user_id, username, display_name, role, apartment_id
+        SELECT user_id, username, display_name, role, apartment_id, unit_id, account_status
         FROM users
-        WHERE username = ? AND password = ?
+        WHERE username = ? AND password = ? AND account_status = 'active'
         """,
         (username, password),
     ).fetchone()
@@ -975,6 +1039,7 @@ def month_summary(month: int, year: int, apartment_id: int) -> dict:
     payments = conn.execute(
         """
          SELECT u.unit_number,
+             u.unit_id,
              u.resident_name,
              u.tenant_name,
              COALESCE(NULLIF(u.tenant_name, ''), u.resident_name) AS occupant_name,
@@ -1069,6 +1134,7 @@ def month_summary(month: int, year: int, apartment_id: int) -> dict:
         pending_amount = max(0.0, bill_amount - paid_amount)
         payment_rows.append(
             {
+                "unit_id": row["unit_id"],
                 "unit_number": row["unit_number"],
                 "resident_name": row["resident_name"],
                 "tenant_name": row["tenant_name"] or "",
@@ -1093,6 +1159,30 @@ def month_summary(month: int, year: int, apartment_id: int) -> dict:
         "payments": payment_rows,
         "expenses": [dict(r) for r in expenses],
         "income": [dict(r) for r in income_records],
+    }
+
+
+def unit_summary(month: int, year: int, apartment_id: int, unit_id: int) -> dict:
+    """Return only the linked unit's maintenance information for a tenant."""
+    summary = month_summary(month, year, apartment_id)
+    payments = [row for row in summary["payments"] if row["unit_id"] == unit_id]
+    unit = payments[0] if payments else None
+    billed = unit["bill_amount"] if unit else 0.0
+    collected = unit["paid_amount"] if unit else 0.0
+    return {
+        "month": month,
+        "year": year,
+        "total_billed": billed,
+        "total_collected": collected,
+        "total_pending": max(0.0, billed - collected),
+        "total_expense": 0.0,
+        "total_income": 0.0,
+        "net_balance": 0.0,
+        "previous_balance": 0.0,
+        "cumulative_balance": 0.0,
+        "payments": payments,
+        "expenses": [],
+        "income": [],
     }
 
 
@@ -1366,25 +1456,32 @@ def normalize_mobile_number(mobile_number: str) -> str:
 
 
 def get_user_by_contact(email_address: str, mobile_number: str) -> dict | None:
-    """Get the apartment owner matching both unit owner email and mobile."""
+    """Get an account matching email and its apartment/unit mobile number."""
     conn = get_conn()
     users = conn.execute(
         """
         SELECT DISTINCT usr.user_id, usr.username, usr.display_name, usr.role, usr.apartment_id,
-            unit.resident_mobile
+            usr.unit_id, unit.resident_mobile, unit.tenant_mobile
         FROM users AS usr
-        JOIN apartments AS apt ON apt.owner_user_id = usr.user_id
-        JOIN units AS unit ON unit.apartment_id = apt.apartment_id
-                WHERE lower(trim(unit.resident_email)) = ?
+        LEFT JOIN apartments AS apt ON apt.owner_user_id = usr.user_id
+        LEFT JOIN units AS unit ON unit.unit_id = usr.unit_id OR (
+            usr.unit_id IS NULL AND unit.apartment_id = apt.apartment_id
+        )
+        WHERE (
+            lower(trim(unit.resident_email)) = ?
+            OR lower(trim(unit.tenant_email)) = ?
+            OR lower(trim(usr.username)) = ?
+        )
         """,
-        (email_address.lower().strip(),),
+        (email_address.lower().strip(), email_address.lower().strip(), email_address.lower().strip()),
     ).fetchall()
     conn.close()
     normalized_mobile = normalize_mobile_number(mobile_number)
     for user in users:
         owner_mobile = normalize_mobile_number(user["resident_mobile"] or "")
+        tenant_mobile = normalize_mobile_number(user["tenant_mobile"] or "")
         login_mobile = normalize_mobile_number(user["username"] or "")
-        if normalized_mobile and normalized_mobile in {owner_mobile, login_mobile}:
+        if normalized_mobile and normalized_mobile in {owner_mobile, tenant_mobile, login_mobile}:
             user_data = dict(user)
             user_data.pop("resident_mobile", None)
             return user_data
@@ -1401,6 +1498,109 @@ def update_user_password(user_id: int, new_password: str) -> bool:
     conn.commit()
     conn.close()
     return cursor.rowcount > 0
+
+
+def get_pending_unit_user(email_address: str, mobile_number: str) -> dict | None:
+    conn = get_conn()
+    rows = conn.execute(
+        """
+        SELECT user_id, username, display_name, role, apartment_id, unit_id
+        FROM users
+        WHERE lower(trim(username)) = ?
+          AND role IN ('unit_owner', 'tenant')
+          AND account_status = 'pending'
+        """,
+        (email_address.strip().lower(),),
+    ).fetchall()
+    conn.close()
+    normalized_mobile = normalize_mobile_number(mobile_number)
+    for row in rows:
+        conn = get_conn()
+        unit = conn.execute(
+            "SELECT resident_mobile, tenant_mobile FROM units WHERE unit_id = ?",
+            (row["unit_id"],),
+        ).fetchone()
+        conn.close()
+        if not unit:
+            continue
+        stored_mobile = unit["resident_mobile"] if row["role"] == "unit_owner" else unit["tenant_mobile"]
+        if normalize_mobile_number(stored_mobile or "") == normalized_mobile:
+            return dict(row)
+    return None
+
+
+@app.route("/activate-account", methods=["GET", "POST"])
+def activate_account():
+    if request.method == "POST":
+        step = request.form.get("step", "contact")
+        if step == "contact":
+            email_address = request.form.get("email_address", "").strip().lower()
+            mobile_number = request.form.get("mobile_number", "").strip()
+            user = get_pending_unit_user(email_address, mobile_number)
+            if not user:
+                return render_template(
+                    "activate_account.html", step="contact",
+                    error="Email and mobile do not match a pending unit account.",
+                    message=None, email_address=email_address, mobile_number=mobile_number,
+                )
+            if not create_otp_session(email_address):
+                return render_template(
+                    "activate_account.html", step="contact",
+                    error="Unable to send activation OTP. Please try again.",
+                    message=None, email_address=email_address, mobile_number=mobile_number,
+                )
+            session["activation_email"] = email_address
+            session["activation_mobile"] = normalize_mobile_number(mobile_number)
+            session["activation_user_id"] = user["user_id"]
+            session["activation_otp_verified"] = False
+            return render_template(
+                "activate_account.html", step="otp", error=None,
+                message=f"OTP sent to {email_address}.", email_address=email_address,
+                mobile_number=mobile_number,
+            )
+
+        email_address = session.get("activation_email", "")
+        mobile_number = session.get("activation_mobile", "")
+        if step == "otp":
+            otp_code = request.form.get("otp_code", "").strip()
+            if not verify_otp(email_address, otp_code):
+                return render_template(
+                    "activate_account.html", step="otp", error="Invalid or expired OTP.",
+                    message=None, email_address=email_address, mobile_number=mobile_number,
+                )
+            session["activation_otp_verified"] = True
+            return render_template(
+                "activate_account.html", step="password", error=None,
+                message="OTP verified. Create your password.", email_address=email_address,
+                mobile_number=mobile_number,
+            )
+
+        if step == "password":
+            password = request.form.get("password", "").strip()
+            confirm_password = request.form.get("confirm_password", "").strip()
+            if not session.get("activation_otp_verified"):
+                return redirect(url_for("activate_account"))
+            if len(password) < 4 or password != confirm_password:
+                return render_template(
+                    "activate_account.html", step="password",
+                    error="Passwords must match and be at least 4 characters.",
+                    message=None, email_address=email_address, mobile_number=mobile_number,
+                )
+            conn = get_conn()
+            conn.execute(
+                "UPDATE users SET password = ?, account_status = 'active' WHERE user_id = ? AND account_status = 'pending'",
+                (password, session.get("activation_user_id")),
+            )
+            conn.commit()
+            conn.close()
+            for key in ("activation_email", "activation_mobile", "activation_user_id", "activation_otp_verified"):
+                session.pop(key, None)
+            return redirect(url_for("login", message="Account activated. Please login with your email and password."))
+
+    return render_template(
+        "activate_account.html", step="contact", error=None, message=None,
+        email_address="", mobile_number="",
+    )
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -1432,6 +1632,7 @@ def login():
         session["display_name"] = row["display_name"]
         session["role"] = row["role"]
         session["apartment_id"] = row["apartment_id"]
+        session["unit_id"] = row["unit_id"]
 
         app.logger.info(f"LOGIN SUCCESS: user_id={row['user_id']}, username={username}")
 
@@ -1932,6 +2133,7 @@ def setup_units():
         tenant_mobiles,
         tenant_emails,
     )
+    create_unit_accounts(apartment_id)
     return redirect(url_for("dashboard"))
 
 
@@ -1967,8 +2169,13 @@ def dashboard():
         year = start_year
         month = start_month
 
-    summary = month_summary(month, year, apartment_id)
     is_owner = is_apartment_owner(session.get("user_id"), apartment_id)
+    unit_id = get_user_unit_id(session.get("user_id"))
+    summary = (
+        month_summary(month, year, apartment_id)
+        if is_owner or unit_id is None
+        else unit_summary(month, year, apartment_id, unit_id)
+    )
     return render_template(
         "index.html",
         summary=summary,
@@ -1983,7 +2190,7 @@ def dashboard():
         can_manage_payments=is_owner,
         can_manage_units=is_owner,
         can_manage_expenditures=is_owner,
-        can_view_reports=True,
+        can_view_reports=is_owner,
         can_set_opening_balance=is_owner and not is_opening_balance_locked(apartment_id),
         opening_balance_locked=is_opening_balance_locked(apartment_id),
     )
@@ -1995,6 +2202,8 @@ def reports_page():
     apartment_id = get_user_apartment_id(session.get("user_id"))
     if apartment_id is None:
         return redirect(url_for("setup"))
+    if not is_apartment_owner(session.get("user_id"), apartment_id):
+        return jsonify({"error": "Only the apartment owner can access reports"}), 403
 
     apartment_name = get_apartment_name_by_id(apartment_id)
     start_year, start_month = get_apartment_start_period(apartment_id)
@@ -2032,6 +2241,8 @@ def generate_reports():
     apartment_id = get_user_apartment_id(session.get("user_id"))
     if apartment_id is None:
         return redirect(url_for("setup"))
+    if not is_apartment_owner(session.get("user_id"), apartment_id):
+        return jsonify({"error": "Only the apartment owner can generate reports"}), 403
 
     apartment_name = get_apartment_name_by_id(apartment_id)
     start_year, start_month = get_apartment_start_period(apartment_id)
@@ -2125,6 +2336,8 @@ def download_report(filename: str):
     apartment_id = get_user_apartment_id(session.get("user_id"))
     if apartment_id is None:
         return redirect(url_for("setup"))
+    if not is_apartment_owner(session.get("user_id"), apartment_id):
+        return jsonify({"error": "Only the apartment owner can download reports"}), 403
 
     safe_name = Path(filename).name
     if safe_name != filename:
@@ -2535,7 +2748,12 @@ def api_summary(year: int, month: int):
             400,
         )
 
-    payload = month_summary(month, year, apartment_id)
+    unit_id = get_user_unit_id(session.get("user_id"))
+    payload = (
+        month_summary(month, year, apartment_id)
+        if is_apartment_owner(session.get("user_id"), apartment_id) or unit_id is None
+        else unit_summary(month, year, apartment_id, unit_id)
+    )
     payload["apartment_name"] = get_apartment_name_by_id(apartment_id)
     return jsonify(payload)
 
@@ -2546,7 +2764,7 @@ def view_logs():
     """View application logs (admin only)."""
     try:
         # Only owner can view logs
-        if not session.get("apartment_id"):
+        if not is_apartment_owner(session.get("user_id"), session.get("apartment_id")):
             return jsonify({"error": "Unauthorized"}), 403
         
         if not LOG_FILE.exists():
