@@ -2352,6 +2352,12 @@ def view_logs():
         return jsonify({"error": str(e)}), 500
 
 
-if __name__ == "__main__":
+try:
     init_db()
+except Exception as e:
+    app.logger.error(f"Database initialization failed during startup: {str(e)}")
+    raise
+
+
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
