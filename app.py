@@ -1361,7 +1361,8 @@ def verify_otp(email_address: str, otp_code: str) -> bool:
 
 def normalize_mobile_number(mobile_number: str) -> str:
     """Compare mobile numbers consistently despite spaces or punctuation."""
-    return "".join(character for character in mobile_number if character.isdigit())
+    digits = "".join(character for character in mobile_number if character.isdigit())
+    return digits[-10:] if len(digits) >= 10 else digits
 
 
 def get_user_by_contact(email_address: str, mobile_number: str) -> dict | None:
@@ -1374,7 +1375,7 @@ def get_user_by_contact(email_address: str, mobile_number: str) -> dict | None:
         FROM users AS usr
         JOIN apartments AS apt ON apt.owner_user_id = usr.user_id
         JOIN units AS unit ON unit.apartment_id = apt.apartment_id
-                WHERE lower(unit.resident_email) = ?
+                WHERE lower(trim(unit.resident_email)) = ?
         """,
         (email_address.lower().strip(),),
     ).fetchall()
