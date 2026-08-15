@@ -1359,23 +1359,33 @@ def verify_otp(email_address: str, otp_code: str) -> bool:
     return True
 
 
+def normalize_mobile_number(mobile_number: str) -> str:
+    """Compare mobile numbers consistently despite spaces or punctuation."""
+    return "".join(character for character in mobile_number if character.isdigit())
+
+
 def get_user_by_contact(email_address: str, mobile_number: str) -> dict | None:
     """Get the apartment owner matching both unit owner email and mobile."""
     conn = get_conn()
-    user = conn.execute(
+    users = conn.execute(
         """
-        SELECT DISTINCT usr.user_id, usr.username, usr.display_name, usr.role, usr.apartment_id
+        SELECT DISTINCT usr.user_id, usr.username, usr.display_name, usr.role, usr.apartment_id,
+            unit.resident_mobile
         FROM users AS usr
         JOIN apartments AS apt ON apt.owner_user_id = usr.user_id
         JOIN units AS unit ON unit.apartment_id = apt.apartment_id
                 WHERE lower(unit.resident_email) = ?
-                    AND unit.resident_mobile = ?
-        LIMIT 1
         """,
-                (email_address.lower(), mobile_number.strip()),
-    ).fetchone()
+        (email_address.lower().strip(),),
+    ).fetchall()
     conn.close()
-    return dict(user) if user else None
+    normalized_mobile = normalize_mobile_number(mobile_number)
+    for user in users:
+        if normalize_mobile_number(user["resident_mobile"] or "") == normalized_mobile:
+            user_data = dict(user)
+            user_data.pop("resident_mobile", None)
+            return user_data
+    return None
 
 
 def update_user_password(user_id: int, new_password: str) -> bool:
@@ -1439,7 +1449,11 @@ def forgot_password():
         if step == "email":
             email_address = request.form.get("email_address", "").strip().lower()
             mobile_number = request.form.get("mobile_number", "").strip()
-            if "@" not in email_address or "." not in email_address or not mobile_number:
+            if (
+                "@" not in email_address
+                or "." not in email_address
+                or not normalize_mobile_number(mobile_number)
+            ):
                 return render_template(
                     "forgot_password.html",
                     step="email",
@@ -1471,7 +1485,7 @@ def forgot_password():
                 )
 
             session["reset_email"] = email_address
-            session["reset_mobile"] = mobile_number
+            session["reset_mobile"] = normalize_mobile_number(mobile_number)
             session["reset_otp_verified"] = False
             return render_template(
                 "forgot_password.html",
