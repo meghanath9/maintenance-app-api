@@ -482,6 +482,15 @@ def create_user(username: str, password: str, display_name: str, role: str = "ad
 def create_unit_accounts(apartment_id: int) -> None:
     """Create pending owner and tenant accounts for the apartment's units."""
     conn = get_conn()
+    admin = conn.execute(
+        """
+        SELECT user_id, username
+        FROM users
+        WHERE apartment_id = ? AND role = 'admin'
+        LIMIT 1
+        """,
+        (apartment_id,),
+    ).fetchone()
     units = conn.execute(
         """
         SELECT unit_id, resident_name, resident_mobile, resident_email,
@@ -492,13 +501,26 @@ def create_unit_accounts(apartment_id: int) -> None:
         (apartment_id,),
     ).fetchall()
     for unit in units:
+        if (
+            admin
+            and normalize_mobile_number(admin["username"] or "")
+            and normalize_mobile_number(admin["username"] or "")
+            == normalize_mobile_number(unit["resident_mobile"] or "")
+        ):
+            conn.execute(
+                "UPDATE users SET unit_id = ? WHERE user_id = ?",
+                (unit["unit_id"], admin["user_id"]),
+            )
+
         account_specs = [
             (unit["resident_email"], unit["resident_mobile"], unit["resident_name"], "unit_owner"),
             (unit["tenant_email"], unit["tenant_mobile"], unit["tenant_name"], "tenant"),
         ]
-        for email, mobile, display_name, role in account_specs:
+        for account_index, (email, mobile, display_name, role) in enumerate(account_specs):
             email = (email or "").strip().lower()
             if not email or not display_name or not mobile:
+                continue
+            if account_index == 0 and admin and normalize_mobile_number(admin["username"] or "") == normalize_mobile_number(mobile):
                 continue
             existing = conn.execute(
                 "SELECT user_id FROM users WHERE username = ?",
