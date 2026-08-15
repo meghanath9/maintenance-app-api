@@ -1360,22 +1360,29 @@ def verify_otp(email_address: str, otp_code: str) -> bool:
 
 
 def get_user_by_email(email_address: str) -> dict | None:
-    """Get user by email address (username)."""
+    """Get the apartment owner associated with a unit owner email address."""
     conn = get_conn()
     user = conn.execute(
-        "SELECT user_id, username, display_name, role, apartment_id FROM users WHERE username = ?",
-        (email_address,)
+        """
+        SELECT DISTINCT usr.user_id, usr.username, usr.display_name, usr.role, usr.apartment_id
+        FROM users AS usr
+        JOIN apartments AS apt ON apt.owner_user_id = usr.user_id
+        JOIN units AS unit ON unit.apartment_id = apt.apartment_id
+        WHERE lower(unit.resident_email) = ?
+        LIMIT 1
+        """,
+        (email_address.lower(),),
     ).fetchone()
     conn.close()
     return dict(user) if user else None
 
 
-def update_user_password_by_email(email_address: str, new_password: str) -> bool:
-    """Update user password by email address (username)."""
+def update_user_password(user_id: int, new_password: str) -> bool:
+    """Update a user's password by user ID."""
     conn = get_conn()
     cursor = conn.execute(
-        "UPDATE users SET password = ? WHERE username = ?",
-        (new_password, email_address),
+        "UPDATE users SET password = ? WHERE user_id = ?",
+        (new_password, user_id),
     )
     conn.commit()
     conn.close()
@@ -1541,7 +1548,8 @@ def forgot_password():
                     email_address=email_address,
                 )
 
-            if not update_user_password_by_email(email_address, new_password):
+            user = get_user_by_email(email_address)
+            if not user or not update_user_password(int(user["user_id"]), new_password):
                 return render_template(
                     "forgot_password.html",
                     step="reset",
