@@ -1359,8 +1359,8 @@ def verify_otp(email_address: str, otp_code: str) -> bool:
     return True
 
 
-def get_user_by_email(email_address: str) -> dict | None:
-    """Get the apartment owner associated with a unit owner email address."""
+def get_user_by_contact(email_address: str, mobile_number: str) -> dict | None:
+    """Get the apartment owner matching both unit owner email and mobile."""
     conn = get_conn()
     user = conn.execute(
         """
@@ -1368,10 +1368,11 @@ def get_user_by_email(email_address: str) -> dict | None:
         FROM users AS usr
         JOIN apartments AS apt ON apt.owner_user_id = usr.user_id
         JOIN units AS unit ON unit.apartment_id = apt.apartment_id
-        WHERE lower(unit.resident_email) = ?
+                WHERE lower(unit.resident_email) = ?
+                    AND unit.resident_mobile = ?
         LIMIT 1
         """,
-        (email_address.lower(),),
+                (email_address.lower(), mobile_number.strip()),
     ).fetchone()
     conn.close()
     return dict(user) if user else None
@@ -1437,23 +1438,26 @@ def forgot_password():
 
         if step == "email":
             email_address = request.form.get("email_address", "").strip().lower()
-            if "@" not in email_address or "." not in email_address:
+            mobile_number = request.form.get("mobile_number", "").strip()
+            if "@" not in email_address or "." not in email_address or not mobile_number:
                 return render_template(
                     "forgot_password.html",
                     step="email",
-                    error="Enter a valid email address",
+                    error="Enter a valid email address and mobile number.",
                     message=None,
-                    email_address="",
+                    email_address=email_address,
+                    mobile_number=mobile_number,
                 )
 
-            user = get_user_by_email(email_address)
+            user = get_user_by_contact(email_address, mobile_number)
             if not user:
                 return render_template(
                     "forgot_password.html",
                     step="email",
-                    error="Email not found.",
+                    error="Email address and mobile number do not match.",
                     message=None,
-                    email_address="",
+                    email_address=email_address,
+                    mobile_number=mobile_number,
                 )
 
             if not create_otp_session(email_address):
@@ -1462,10 +1466,12 @@ def forgot_password():
                     step="email",
                     error="Failed to send OTP. Please try again.",
                     message=None,
-                    email_address="",
+                    email_address=email_address,
+                    mobile_number=mobile_number,
                 )
 
             session["reset_email"] = email_address
+            session["reset_mobile"] = mobile_number
             session["reset_otp_verified"] = False
             return render_template(
                 "forgot_password.html",
@@ -1473,10 +1479,12 @@ def forgot_password():
                 error=None,
                 message=f"OTP sent to {email_address}. Valid for {OTP_VALIDITY_MINUTES} minutes.",
                 email_address=email_address,
+                mobile_number=mobile_number,
             )
 
         if step == "otp":
             email_address = session.get("reset_email", "").strip()
+            mobile_number = session.get("reset_mobile", "").strip()
             otp_code = request.form.get("otp_code", "").strip()
 
             if not email_address:
@@ -1486,6 +1494,7 @@ def forgot_password():
                     error="Session expired. Start again.",
                     message=None,
                     email_address="",
+                    mobile_number="",
                 )
 
             if len(otp_code) != OTP_LENGTH or not otp_code.isdigit():
@@ -1495,6 +1504,7 @@ def forgot_password():
                     error=f"OTP must be {OTP_LENGTH} digits",
                     message=None,
                     email_address=email_address,
+                    mobile_number=mobile_number,
                 )
 
             if not verify_otp(email_address, otp_code):
@@ -1504,6 +1514,7 @@ def forgot_password():
                     error="Invalid or expired OTP.",
                     message=None,
                     email_address=email_address,
+                    mobile_number=mobile_number,
                 )
 
             session["reset_otp_verified"] = True
@@ -1513,10 +1524,12 @@ def forgot_password():
                 error=None,
                 message="OTP verified. Set your new password.",
                 email_address=email_address,
+                mobile_number=mobile_number,
             )
 
         if step == "reset":
             email_address = session.get("reset_email", "").strip()
+            mobile_number = session.get("reset_mobile", "").strip()
             otp_verified = bool(session.get("reset_otp_verified"))
             new_password = request.form.get("new_password", "").strip()
             confirm_password = request.form.get("confirm_password", "").strip()
@@ -1528,6 +1541,7 @@ def forgot_password():
                     error="Session expired. Start again.",
                     message=None,
                     email_address="",
+                    mobile_number="",
                 )
 
             if len(new_password) < 4:
@@ -1537,6 +1551,7 @@ def forgot_password():
                     error="Password must be at least 4 characters.",
                     message=None,
                     email_address=email_address,
+                    mobile_number=mobile_number,
                 )
 
             if new_password != confirm_password:
@@ -1546,9 +1561,10 @@ def forgot_password():
                     error="Password and confirm password must match.",
                     message=None,
                     email_address=email_address,
+                    mobile_number=mobile_number,
                 )
 
-            user = get_user_by_email(email_address)
+            user = get_user_by_contact(email_address, mobile_number)
             if not user or not update_user_password(int(user["user_id"]), new_password):
                 return render_template(
                     "forgot_password.html",
@@ -1559,6 +1575,7 @@ def forgot_password():
                 )
 
             session.pop("reset_email", None)
+            session.pop("reset_mobile", None)
             session.pop("reset_otp_verified", None)
             app.logger.info(f"PASSWORD RESET SUCCESS: email={email_address}")
             return redirect(url_for("login", message="Password reset successful. Please login."))
@@ -1569,6 +1586,7 @@ def forgot_password():
         error=None,
         message=None,
         email_address="",
+        mobile_number="",
     )
 
 
