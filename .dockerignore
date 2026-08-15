@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+reports/
+mobile_app/node_modules/
+mobile_app/.expo/
+.git/
+.vscode/

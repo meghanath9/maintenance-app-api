@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Manage Unit Owner and Tenant Details</title>
+  <style>
+    :root {
+      --bg: #eef4fb;
+      --panel: #ffffff;
+      --ink: #1f2b3a;
+      --muted: #5d6a79;
+      --line: #d7e1ec;
+      --primary: #235f9b;
+      --danger: #b42318;
+      --ok: #0e8a46;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--ink);
+      background: linear-gradient(145deg, #f2f7fc, #e4edf7);
+      padding: 16px;
+    }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+      margin-bottom: 14px;
+    }
+    h1 { margin: 0 0 8px; }
+    p { margin: 0 0 10px; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--line); padding: 10px 8px; text-align: left; }
+    th { background: #f3f7fb; }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 9px;
+      background: #fff;
+    }
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 11px 14px;
+      color: #fff;
+      background: var(--primary);
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .msg { color: var(--ok); font-weight: 600; margin-bottom: 8px; }
+    .err { color: var(--danger); font-weight: 600; margin-bottom: 8px; }
+    .back { color: #1f4d75; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>{{ apartment_name }} - Unit Owner and Tenant Details</h1>
+      <p>Update owner and tenant names without changing the floor and unit structure.</p>
+      <a class="back" href="/dashboard">Back to Dashboard</a>
+    </div>
+
+    <div class="panel">
+      {% if message %}<div class="msg">{{ message }}</div>{% endif %}
+      {% if error %}<div class="err">{{ error }}</div>{% endif %}
+
+      <form method="post" action="/units/manage">
+        <table>
+          <thead>
+            <tr>
+              <th>Unit</th>
+              <th>Owner Name</th>
+              <th>Tenant Name (Optional)</th>
+              <th>Current Occupant</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for u in units %}
+            <tr>
+              <td>{{ u.unit_number }}</td>
+              <td>
+                <input name="owner_name_{{ u.unit_id }}" type="text" value="{{ u.resident_name }}" required />
+              </td>
+              <td>
+                <input name="tenant_name_{{ u.unit_id }}" type="text" value="{{ u.tenant_name or '' }}" />
+              </td>
+              <td>{{ u.occupant_name }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <button type="submit">Save Unit Details</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

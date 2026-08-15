@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Create Apartment Details</title>
+  <style>
+    :root {
+      --bg1: #fff7e8;
+      --bg2: #f3e7cb;
+      --panel: #fff;
+      --ink: #2a2a2a;
+      --muted: #666;
+      --line: #e8ddc5;
+      --primary: #9a4f12;
+      --danger: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(160deg, var(--bg1), var(--bg2));
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--ink);
+      padding: 16px;
+    }
+    .panel {
+      width: 100%;
+      max-width: 520px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 22px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    }
+    h1 { margin: 0 0 8px; }
+    p { margin: 0 0 12px; color: var(--muted); }
+    label { display: block; margin: 10px 0 6px; font-weight: 600; }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 0.95rem;
+      background: #fff;
+    }
+    button {
+      margin-top: 14px;
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      background: var(--primary);
+      color: #fff;
+      padding: 10px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .error { margin-top: 10px; color: var(--danger); font-weight: 600; }
+    .locked {
+      margin-top: 10px;
+      color: #7a4d10;
+      background: #fff1dc;
+      border: 1px solid #efd4a6;
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .note { margin-top: 10px; font-size: 0.86rem; }
+    .back {
+      display: inline-block;
+      margin-top: 10px;
+      color: #1f4d75;
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <form class="panel" method="post" action="/setup">
+    <h1>Create Apartment Details</h1>
+    <p>Set friendly apartment and owner details to get started.</p>
+
+    {% if is_locked %}
+      <div class="locked">
+        {% if apartment_name_locked %}
+        Apartment name was already updated once. It is now locked and cannot be changed again.
+        {% else %}
+        Apartment details are already configured. You can view this page, but only the creator account can edit details.
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <label for="apartment_name">Apartment Name</label>
+    <input id="apartment_name" name="apartment_name" type="text" value="{{ apartment_name }}" placeholder="Example: Greenfield Heights" required {% if is_locked %}disabled{% endif %} />
+
+    <label for="admin_name">Your Name</label>
+    <input id="admin_name" name="admin_name" type="text" placeholder="Example: Ramesh Kumar" value="{{ owner_profile.display_name }}" required {% if is_locked %}disabled{% endif %} />
+
+    <label for="admin_phone">Mobile Number</label>
+    <input id="admin_phone" name="admin_phone" type="tel" placeholder="Example: 9876543210" value="{{ owner_profile.username }}" required {% if is_locked %}disabled{% endif %} />
+
+    <label for="admin_password">{% if is_configured %}New Password (Optional){% else %}Create Password{% endif %}</label>
+    <input id="admin_password" name="admin_password" type="password" {% if not is_configured %}required{% endif %} {% if is_locked %}disabled{% endif %} />
+
+    <label for="confirm_password">{% if is_configured %}Confirm New Password{% else %}Confirm Password{% endif %}</label>
+    <input id="confirm_password" name="confirm_password" type="password" {% if not is_configured %}required{% endif %} {% if is_locked %}disabled{% endif %} />
+
+    {% if is_locked %}
+      <a class="back" href="/login">Go to Login</a>
+    {% elif can_edit_existing and not apartment_name_locked %}
+      <button type="submit">Update Apartment Details</button>
+    {% else %}
+      {% if is_configured %}
+      <a class="back" href="/dashboard">Go to Dashboard</a>
+      {% else %}
+      <button type="submit">Save And Continue</button>
+      {% endif %}
+    {% endif %}
+
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <div class="note">Suggested names: Greenfield Heights, Lakeview Residency, Sunrise Gardens.</div>
+    {% if not is_configured %}
+    <div class="note">You will log in using your mobile number and password.</div>
+    {% else %}
+    <div class="note">Only the creator account can update apartment details.</div>
+    {% endif %}
+    <a class="back" href="/">Back to launch</a>
+  </form>
+</body>
+</html>

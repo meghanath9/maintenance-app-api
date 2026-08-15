@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Apartment Finance App</title>
+  <style>
+    :root {
+      --bg1: #eef5e8;
+      --bg2: #d9e8d1;
+      --panel: #fff;
+      --ink: #1a2a21;
+      --muted: #53635b;
+      --primary: #2f855a;
+      --secondary: #315d8f;
+      --line: #d5e2d0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(150deg, var(--bg1), var(--bg2));
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--ink);
+      padding: 16px;
+    }
+    .panel {
+      width: 100%;
+      max-width: 820px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+    }
+    h1 { margin: 0 0 8px; font-size: 1.9rem; }
+    p { margin: 0 0 14px; color: var(--muted); }
+    .status {
+      margin: 10px 0 20px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #f6fbf4;
+      border: 1px solid var(--line);
+      font-size: 0.95rem;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .btn {
+      text-decoration: none;
+      color: #fff;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      display: inline-block;
+    }
+    .btn-primary { background: var(--primary); }
+    .btn-secondary { background: var(--secondary); }
+    h2 { margin: 8px 0 8px; font-size: 1.1rem; }
+    ul { margin: 0; padding-left: 18px; color: var(--muted); }
+    li { margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h1>Apartment Maintenance Finance App</h1>
+    <p>Choose what you want to do when launching the app.</p>
+
+    <div class="status">
+      {% if is_configured %}
+        Configured Apartment: <strong>{{ apartment_name }}</strong>
+      {% else %}
+        App is not configured yet. Create apartment details to begin.
+      {% endif %}
+    </div>
+
+    <div class="actions">
+      <a class="btn btn-primary" href="/login">Login</a>
+      <a class="btn btn-secondary" href="/setup">Create Apartment Details</a>
+    </div>
+
+    <h2>Suggested Apartment Names</h2>
+    <ul>
+      <li>Greenfield Heights</li>
+      <li>Lakeview Residency</li>
+      <li>Sunrise Gardens</li>
+      <li>Maple Court Apartments</li>
+      <li>Silver Oak Enclave</li>
+      <li>Cedar Bloom Towers</li>
+    </ul>
+  </div>
+</body>
+</html>

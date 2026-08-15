@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Manage Maintenance Payments</title>
+  <style>
+    :root {
+      --bg: #eef4fb;
+      --panel: #ffffff;
+      --ink: #1f2b3a;
+      --muted: #5d6a79;
+      --line: #d7e1ec;
+      --primary: #235f9b;
+      --danger: #b42318;
+      --ok: #0e8a46;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--ink);
+      background: linear-gradient(145deg, #f2f7fc, #e4edf7);
+      padding: 16px;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+      margin-bottom: 14px;
+    }
+    h1 { margin: 0 0 8px; }
+    p { margin: 0 0 10px; color: var(--muted); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+    }
+    label { display: block; margin: 0 0 6px; font-weight: 600; }
+    input, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fff;
+    }
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 11px 14px;
+      color: #fff;
+      background: var(--primary);
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 700px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 10px 8px; text-align: left; }
+    th { background: #f3f7fb; }
+    .status-paid { color: var(--ok); font-weight: 700; }
+    .status-not { color: #b14c1d; font-weight: 700; }
+    .msg { color: var(--ok); font-weight: 600; margin-bottom: 8px; }
+    .err { color: var(--danger); font-weight: 600; margin-bottom: 8px; }
+    .back { color: #1f4d75; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>{{ apartment_name }} - Maintenance Payment Entry</h1>
+      <p>Only the logged-in apartment owner can update paid/not-paid status.</p>
+      <p>History starts from {{ "%02d"|format(start_month) }}/{{ start_year }}.</p>
+      <a class="back" href="/dashboard">Back to Dashboard</a>
+    </div>
+
+    <div class="panel">
+      <h2>Default Maintenance Amount (Applies To All Units)</h2>
+      <form method="post" action="/payments/manage">
+        <input type="hidden" name="action" value="set_default" />
+        <div class="grid">
+          <div>
+            <label for="default_maintenance_amount">Default Amount</label>
+            <input id="default_maintenance_amount" name="default_maintenance_amount" type="number" step="0.01" min="0" value="{{ default_maintenance_amount }}" required />
+          </div>
+          <div>
+            <label>&nbsp;</label>
+            <button type="submit">Save As Default For All Units</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Bulk Update Maintenance Status</h2>
+      {% if message %}<div class="msg">{{ message }}</div>{% endif %}
+      {% if error %}<div class="err">{{ error }}</div>{% endif %}
+      <form method="post" action="/payments/manage">
+        <input type="hidden" name="action" value="bulk_update" />
+        <div class="grid">
+          <div>
+            <label for="month">Month</label>
+            <input id="month" name="month" type="number" min="1" max="12" value="{{ month }}" required />
+          </div>
+          <div>
+            <label for="year">Year</label>
+            <input id="year" name="year" type="number" min="{{ start_year }}" max="2100" value="{{ year }}" required />
+          </div>
+          <div>
+            <label for="bill_amount">Maintenance Amount (Same for selected units)</label>
+            <input id="bill_amount" name="bill_amount" type="number" step="0.01" min="0" value="{{ default_maintenance_amount }}" required />
+          </div>
+          <div>
+            <label for="bulk_status">Payment Status</label>
+            <select id="bulk_status" name="bulk_status" required>
+              <option value="paid">Paid</option>
+              <option value="not_paid">Not Paid</option>
+            </select>
+          </div>
+          <div>
+            <label for="payment_mode">Payment Mode</label>
+            <input id="payment_mode" name="payment_mode" type="text" value="Manual" />
+          </div>
+          <div>
+            <label for="transaction_ref">Transaction Ref (Optional)</label>
+            <input id="transaction_ref" name="transaction_ref" type="text" />
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:12px; padding:10px;">
+          <label style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+            <input id="select_all_units" type="checkbox" style="width:auto;" />
+            Select all units
+          </label>
+          <div class="grid">
+            {% for u in units %}
+            <label style="display:flex; align-items:center; gap:8px; margin:0;">
+              <input class="unit-checkbox" type="checkbox" name="selected_units" value="{{ u.unit_id }}" style="width:auto;" />
+              {{ u.unit_number }} - Occupant: {{ u.occupant_name }} (Owner: {{ u.resident_name }})
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+          <button type="submit" name="apply_action" value="mark_paid">Mark Selected Paid</button>
+          <button type="submit" name="apply_action" value="mark_unpaid" style="background:#b14c1d;">Mark Selected Unpaid</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="panel" style="overflow-x:auto;">
+      <h2>Month Status ({{ month }}/{{ year }})</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Unit</th>
+            <th>Owner</th>
+            <th>Tenant</th>
+            <th>Current Occupant</th>
+            <th>Bill Amount</th>
+            <th>Paid Amount</th>
+            <th>Pending</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in status_rows %}
+          <tr>
+            <td>{{ r.unit_number }}</td>
+            <td>{{ r.resident_name }}</td>
+            <td>{{ r.tenant_name or '-' }}</td>
+            <td>{{ r.occupant_name }}</td>
+            <td>{{ r.bill_amount }}</td>
+            <td>{{ r.paid_amount }}</td>
+            <td>{{ r.pending_amount }}</td>
+            <td class="{% if r.status == 'Paid' %}status-paid{% else %}status-not{% endif %}">{{ r.status }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <script>
+    const selectAll = document.getElementById("select_all_units");
+    const checkboxes = Array.from(document.querySelectorAll(".unit-checkbox"));
+    if (selectAll) {
+      selectAll.addEventListener("change", () => {
+        checkboxes.forEach((box) => {
+          box.checked = selectAll.checked;
+        });
+      });
+    }
+  </script>
+</body>
+</html>

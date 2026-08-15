@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ apartment_name }} - Maintenance Finance</title>
+  <style>
+    :root {
+      --bg: #f4efe5;
+      --panel: #fffaf0;
+      --ink: #1f2a37;
+      --accent: #1a7f64;
+      --accent-2: #cf6a32;
+      --muted: #5b6575;
+      --line: #e5dcca;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at top right, #f9f3e8, #efe7d8 55%, #e8ddc9 100%);
+    }
+    .wrap { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    h1 { margin: 0 0 8px; font-size: 1.9rem; }
+    p { color: var(--muted); margin: 0 0 16px; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+    }
+    .card .k { color: var(--muted); font-size: 0.88rem; }
+    .card .v { margin-top: 4px; font-size: 1.2rem; font-weight: 700; }
+    .ok { color: var(--accent); }
+    .warn { color: var(--accent-2); }
+    .pane {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+      overflow-x: auto;
+    }
+    h2 { margin: 0 0 10px; font-size: 1.1rem; }
+    table { width: 100%; border-collapse: collapse; min-width: 600px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 10px 8px; text-align: left; }
+    th { background: #f8efde; font-size: 0.92rem; }
+    .small { font-size: 0.86rem; color: var(--muted); }
+    .name-form {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 10px 0 18px;
+    }
+    .name-form input {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      min-width: 260px;
+      background: #fff;
+    }
+    .name-form button {
+      border: 0;
+      border-radius: 10px;
+      background: var(--accent);
+      color: #fff;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .logout {
+      text-decoration: none;
+      background: #324968;
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .period-form {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 10px 0 16px;
+    }
+    .period-form select,
+    .period-form input {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 9px 10px;
+      background: #fff;
+      color: var(--ink);
+    }
+    .period-form button {
+      border: 0;
+      border-radius: 10px;
+      background: #324968;
+      color: #fff;
+      padding: 9px 14px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top-bar">
+      <p style="margin:0; font-weight:600; color:#2a3a4f;">Logged in as: {{ user_display_name }}</p>
+      <a class="logout" href="/logout">Logout</a>
+    </div>
+    <h1>{{ apartment_name }} - Maintenance Finance Dashboard</h1>
+    <p>Transparent monthly collections and expenditures visible to everyone.</p>
+
+    {% if can_edit_settings %}
+    <form class="name-form" method="post" action="/settings/apartment-name">
+      <input type="text" name="apartment_name" value="{{ apartment_name }}" placeholder="Enter apartment name" required />
+      <button type="submit">Update Apartment Name</button>
+    </form>
+    {% else %}
+    <p class="small">Read-only view. Only the user who created apartment details can edit settings.</p>
+    {% endif %}
+
+    {% if can_set_opening_balance %}
+    <form class="name-form" method="post" action="/settings/opening-balance">
+      <input type="number" step="0.01" min="0" name="opening_balance" value="{{ opening_balance }}" placeholder="Previous balance before installation" required />
+      <button type="submit">Save Previous Balance</button>
+    </form>
+    {% elif opening_balance_locked %}
+    <p class="small">Previous balance is locked after first save and cannot be changed.</p>
+    {% endif %}
+
+    {% if can_manage_payments %}
+    <p class="small"><a href="/payments/manage">Manage Maintenance Paid / Not Paid</a></p>
+    {% endif %}
+    {% if can_manage_units %}
+    <p class="small"><a href="/units/manage">Manage Unit Owner / Tenant Details</a></p>
+    {% endif %}
+    {% if can_manage_expenditures %}
+    <p class="small"><a href="/expenditures/manage">Manage Expenditure Ledger</a></p>
+    {% endif %}
+    {% if can_manage_expenditures %}
+    <p class="small"><a href="/income/manage">Manage Income Ledger</a></p>
+    {% endif %}
+    {% if can_view_reports %}
+    <p class="small"><a href="/reports">Reports</a></p>
+    {% endif %}
+
+    <form class="period-form" method="get" action="/dashboard">
+      <label for="month"><strong>Month</strong></label>
+      <select id="month" name="month">
+        {% for m in range(1, 13) %}
+        <option value="{{ m }}" {% if m == selected_month %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+      </select>
+      <label for="year"><strong>Year</strong></label>
+      <input id="year" name="year" type="number" min="{{ start_year }}" max="2100" value="{{ selected_year }}" required />
+      <button type="submit">View History</button>
+    </form>
+    <p class="small">History starts from {{ "%02d"|format(start_month) }}/{{ start_year }}.</p>
+
+    <div class="cards">
+      <div class="card"><div class="k">Month / Year</div><div class="v">{{ summary.month }} / {{ summary.year }}</div></div>
+      <div class="card"><div class="k">Previous Balance</div><div class="v">{{ summary.previous_balance }}</div></div>
+      <div class="card"><div class="k">Total Billed</div><div class="v">{{ summary.total_billed }}</div></div>
+      <div class="card"><div class="k">Collected</div><div class="v ok">{{ summary.total_collected }}</div></div>
+      <div class="card"><div class="k">Pending</div><div class="v warn">{{ summary.total_pending }}</div></div>
+      <div class="card"><div class="k">Income</div><div class="v ok">{{ summary.total_income }}</div></div>
+      <div class="card"><div class="k">Expenses</div><div class="v">{{ summary.total_expense }}</div></div>
+      <div class="card"><div class="k">Balance</div><div class="v">{{ summary.net_balance }}</div></div>
+      <div class="card"><div class="k">Cumulative Balance</div><div class="v ok">{{ summary.cumulative_balance }}</div></div>
+    </div>
+
+    <div class="pane">
+      <h2>Unit-wise Payment Status</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Unit</th>
+            <th>Owner</th>
+            <th>Tenant</th>
+            <th>Current Occupant</th>
+            <th>Bill Amount</th>
+            <th>Paid</th>
+            <th>Pending</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in summary.payments %}
+          <tr>
+            <td>{{ p.unit_number }}</td>
+            <td>{{ p.resident_name }}</td>
+            <td>{{ p.tenant_name or '-' }}</td>
+            <td>{{ p.occupant_name }}</td>
+            <td>{{ p.bill_amount }}</td>
+            <td>{{ p.paid_amount }}</td>
+            <td>{{ p.pending_amount }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pane">
+      <h2>Expenditure Ledger</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Category</th>
+            <th>Vendor</th>
+            <th>Amount</th>
+            <th>Invoice</th>
+            <th>Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in summary.expenses %}
+          <tr>
+            <td>{{ e.expense_date }}</td>
+            <td>{{ e.category }}</td>
+            <td>{{ e.vendor_name }}</td>
+            <td>{{ e.amount }}</td>
+            <td>{{ e.invoice_ref }}</td>
+            <td>{{ e.remarks }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="small">API: /api/summary/&lt;year&gt;/&lt;month&gt;</p>
+    </div>
+
+    <div class="pane">
+      <h2>Income Ledger</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Category</th>
+            <th>Description</th>
+            <th>Amount</th>
+            <th>Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for i in summary.income %}
+          <tr>
+            <td>{{ i.income_date }}</td>
+            <td>{{ i.category }}</td>
+            <td>{{ i.description }}</td>
+            <td>{{ i.amount }}</td>
+            <td>{{ i.remarks }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

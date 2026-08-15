@@ -1,0 +1,28 @@
+Apartment: VR fortune
+Period: 07/2026
+
+SUMMARY
+Total Billed: 8000.00
+Collected: 6000.00
+Pending: 2000.00
+Income: 7500.00
+Expenses: 4000.00
+Balance: 3500.00
+Previous Balance: 20000.00
+Cumulative Balance: 23500.00
+
+UNIT PAYMENT STATUS
+Unit | Owner | Tenant | Bill | Paid | Pending
+101 | a | - | 2000.00 | 2000.00 | 0.00
+102 | b | - | 2000.00 | 2000.00 | 0.00
+201 | c | - | 2000.00 | 2000.00 | 0.00
+202 | d | - | 2000.00 | 0.00 | 2000.00
+
+EXPENDITURES
+Date | Category | Vendor | Amount | Invoice | Remarks
+2026-07-06 | watchman | watchman | 2000.00 |  | 
+2026-07-06 | Electricirt | BMPC | 2000.00 |  | 
+
+INCOME
+Date | Category | Description | Amount | Remarks
+2026-07-05 | Rent | Stay | 1500.00 | 

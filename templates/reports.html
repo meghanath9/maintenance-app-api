@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ apartment_name }} - Reports</title>
+  <style>
+    :root {
+      --bg: #f2f6fb;
+      --panel: #ffffff;
+      --ink: #1f2b3a;
+      --muted: #5d6a79;
+      --line: #d7e1ec;
+      --primary: #235f9b;
+      --ok: #0e8a46;
+      --danger: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--ink);
+      background: linear-gradient(145deg, #f3f8fe, #e6eef8);
+      padding: 16px;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+      margin-bottom: 14px;
+    }
+    h1, h2 { margin: 0 0 8px; }
+    p { margin: 0 0 10px; color: var(--muted); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+    }
+    label { display: block; margin: 0 0 6px; font-weight: 600; }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fff;
+    }
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: #fff;
+      background: var(--primary);
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .msg { color: var(--ok); font-weight: 600; margin-bottom: 8px; }
+    .err { color: var(--danger); font-weight: 600; margin-bottom: 8px; }
+    .back { color: #1f4d75; text-decoration: none; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid var(--line); padding: 10px 8px; text-align: left; }
+    th { background: #f3f7fb; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>{{ apartment_name }} - Reports</h1>
+      <p>Generate Excel reports for one month, all months, or a custom range.</p>
+      <p>History starts from {{ "%02d"|format(start_month) }}/{{ start_year }}.</p>
+      <a class="back" href="/dashboard">Back to Dashboard</a>
+    </div>
+
+    <div class="panel">
+      {% if message %}<div class="msg">{{ message }}</div>{% endif %}
+      {% if error %}<div class="err">{{ error }}</div>{% endif %}
+
+      <h2>1) Single Month Report</h2>
+      <form method="post" action="/reports/generate">
+        <input type="hidden" name="action" value="single_month" />
+        <div class="grid">
+          <div>
+            <label for="month">Month</label>
+            <input id="month" name="month" type="number" min="1" max="12" value="{{ current_month }}" required />
+          </div>
+          <div>
+            <label for="year">Year</label>
+            <input id="year" name="year" type="number" min="{{ start_year }}" max="{{ current_year }}" value="{{ current_year }}" required />
+          </div>
+        </div>
+        <button type="submit">Generate Single Month Excel</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>2) Separate File For Each Month</h2>
+      <form method="post" action="/reports/generate">
+        <input type="hidden" name="action" value="separate_all_months" />
+        <button type="submit">Generate Separate Monthly Files</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>3) One Workbook For All Months</h2>
+      <form method="post" action="/reports/generate">
+        <input type="hidden" name="action" value="all_months_workbook" />
+        <button type="submit">Generate All-Month Workbook</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>4) Custom Range Workbook</h2>
+      <form method="post" action="/reports/generate">
+        <input type="hidden" name="action" value="custom_range" />
+        <div class="grid">
+          <div>
+            <label for="from_month">From Month</label>
+            <input id="from_month" name="from_month" type="number" min="1" max="12" value="{{ start_month }}" required />
+          </div>
+          <div>
+            <label for="from_year">From Year</label>
+            <input id="from_year" name="from_year" type="number" min="{{ start_year }}" max="{{ current_year }}" value="{{ start_year }}" required />
+          </div>
+          <div>
+            <label for="to_month">To Month</label>
+            <input id="to_month" name="to_month" type="number" min="1" max="12" value="{{ current_month }}" required />
+          </div>
+          <div>
+            <label for="to_year">To Year</label>
+            <input id="to_year" name="to_year" type="number" min="{{ start_year }}" max="{{ current_year }}" value="{{ current_year }}" required />
+          </div>
+        </div>
+        <button type="submit">Generate Custom Range Workbook</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>5) One-Click Generate All + ZIP Download</h2>
+      <p>Generates monthly Excel files from start period to current month, then downloads one ZIP.</p>
+      <form method="post" action="/reports/generate">
+        <input type="hidden" name="action" value="generate_all_zip" />
+        <button type="submit">Generate All + Download ZIP</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Generated Files</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>File Name</th>
+            <th>Size (KB)</th>
+            <th>Updated</th>
+            <th>Download</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in files %}
+          <tr>
+            <td>{{ f.name }}</td>
+            <td>{{ f.size_kb }}</td>
+            <td>{{ f.updated }}</td>
+            <td><a href="/reports/download/{{ f.name }}">Download</a></td>
+          </tr>
+          {% endfor %}
+          {% if files|length == 0 %}
+          <tr>
+            <td colspan="4">No report files generated yet.</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

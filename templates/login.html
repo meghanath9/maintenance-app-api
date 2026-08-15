@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Login - Maintenance Finance</title>
+  <style>
+    :root {
+      --bg1: #faf3e3;
+      --bg2: #efe3ca;
+      --panel: #fffaf0;
+      --ink: #1f2a37;
+      --muted: #5b6575;
+      --line: #e5dcca;
+      --accent: #1a7f64;
+      --danger: #b42318;
+      --success: #0f766e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(circle at top right, var(--bg1), var(--bg2));
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      color: var(--ink);
+      padding: 16px;
+    }
+    .box {
+      width: 100%;
+      max-width: 420px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.09);
+    }
+    h1 { 
+      margin: 0 0 8px; 
+      font-size: 1.5rem; 
+    }
+    .subtitle {
+      margin: 0 0 20px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    label { 
+      display: block; 
+      margin: 14px 0 6px; 
+      font-weight: 600; 
+    }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 0.95rem;
+      background: #fff;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(26, 127, 100, 0.1);
+    }
+    button {
+      margin-top: 18px;
+      width: 100%;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px;
+      color: #fff;
+      background: var(--accent);
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #156b52;
+    }
+    .error {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 8px;
+      color: var(--danger);
+      background: #fee2e2;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .message {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 8px;
+      color: var(--success);
+      background: #ccfbf1;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .hint {
+      margin-top: 14px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .step-indicator {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+    .step {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+      border: 2px solid var(--line);
+      background: #fff;
+      color: var(--muted);
+    }
+    .step.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .step.completed {
+      background: var(--success);
+      color: #fff;
+      border-color: var(--success);
+    }
+  </style>
+</head>
+<body>
+  <form class="box" method="post" action="/login">
+    {% if step == 'email' %}
+      <div class="step-indicator">
+        <div class="step active">1</div>
+        <div class="step">2</div>
+      </div>
+      
+      <h1>Sign In</h1>
+      <p class="subtitle">Enter your registered email address to receive an OTP</p>
+
+      <label for="email_address">Email Address</label>
+      <input 
+        id="email_address" 
+        name="email_address" 
+        type="email" 
+        placeholder="your@email.com"
+        autocomplete="off"
+        required 
+        autofocus
+      />
+
+      <input type="hidden" name="step" value="email" />
+      <button type="submit">Send OTP</button>
+
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+
+      <div class="hint">
+        Don't have an account? <a href="/setup">Create one here</a> | <a href="/">Back to launch</a>
+      </div>
+    
+    {% elif step == 'otp' %}
+      <div class="step-indicator">
+        <div class="step completed">✓</div>
+        <div class="step active">2</div>
+      </div>
+      
+      <h1>Enter OTP</h1>
+      <p class="subtitle">A 6-digit code has been sent to your email</p>
+
+      {% if message %}
+        <div class="message">{{ message }}</div>
+      {% endif %}
+
+      <label for="otp_code">One-Time Password</label>
+      <input 
+        id="otp_code" 
+        name="otp_code" 
+        type="text" 
+        placeholder="000000"
+        maxlength="6"
+        autocomplete="off"
+        required 
+        autofocus
+        pattern="[0-9]{6}"
+      />
+
+      <input type="hidden" name="step" value="otp" />
+      <button type="submit">Verify OTP</button>
+
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+
+      <div class="hint">
+        Didn't receive the code? <a href="/login">Try again with a different email</a>
+      </div>
+    {% endif %}
+  </form>
+</body>
+</html>
