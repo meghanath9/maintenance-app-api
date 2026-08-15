@@ -1350,111 +1350,198 @@ def get_user_by_email(email_address: str) -> dict | None:
     return dict(user) if user else None
 
 
+def update_user_password_by_email(email_address: str, new_password: str) -> bool:
+    """Update user password by email address (username)."""
+    conn = get_conn()
+    cursor = conn.execute(
+        "UPDATE users SET password = ? WHERE username = ?",
+        (new_password, email_address),
+    )
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == "POST":
-        step = request.form.get("step", "email")
-        
-        if step == "email":
-            # Step 1: User enters email address
-            email_address = request.form.get("email_address", "").strip().lower()
-            
-            if "@" not in email_address or "." not in email_address:
-                return render_template(
-                    "login.html",
-                    error="Enter a valid email address",
-                    step="email"
-                )
-            
-            # Check if user exists
-            user = get_user_by_email(email_address)
-            if not user:
-                return render_template(
-                    "login.html",
-                    error="Email not found. Please create an account first.",
-                    step="email"
-                )
-            
-            # Generate and send OTP
-            otp_code = create_otp_session(email_address)
-            if not otp_code:
-                return render_template(
-                    "login.html",
-                    error="Failed to send OTP. Please try again.",
-                    step="email"
-                )
-            
-            app.logger.info(f"OTP requested: email={email_address}")
-            session["login_email"] = email_address
-            
-            return render_template(
-                "login.html",
-                step="otp",
-                email_address=email_address,
-                message=f"OTP sent to {email_address}. Valid for {OTP_VALIDITY_MINUTES} minutes."
-            )
-        
-        elif step == "otp":
-            # Step 2: User enters OTP
-            email_address = session.get("login_email", "").strip()
-            otp_code = request.form.get("otp_code", "").strip()
-            
-            if not email_address:
-                return render_template(
-                    "login.html",
-                    error="Session expired. Please start again.",
-                    step="email"
-                )
-            
-            if len(otp_code) != OTP_LENGTH:
-                return render_template(
-                    "login.html",
-                    step="otp",
-                    email_address=email_address,
-                    error=f"OTP must be {OTP_LENGTH} digits"
-                )
-            
-            # Verify OTP
-            if not verify_otp(email_address, otp_code):
-                return render_template(
-                    "login.html",
-                    step="otp",
-                    email_address=email_address,
-                    error="Invalid or expired OTP. Please try again."
-                )
-            
-            # OTP verified - log the user in
-            user = get_user_by_email(email_address)
-            if user:
-                session.clear()
-                session["user_id"] = int(user["user_id"])
-                session["username"] = user["username"]
-                session["display_name"] = user["display_name"]
-                session["role"] = user["role"]
-                session["apartment_id"] = user["apartment_id"]
-                
-                app.logger.info(f"LOGIN SUCCESS via OTP: user_id={user['user_id']}, email={email_address}")
-                
-                if user["apartment_id"] is None:
-                    return redirect(url_for("setup"))
-                if not apartment_has_units(int(user["apartment_id"])):
-                    return redirect(url_for("setup_units"))
-                return redirect(url_for("dashboard"))
-            else:
-                return render_template(
-                    "login.html",
-                    error="User account not found",
-                    step="email"
-                )
-    
-    # GET request or initial load
+    login_message = request.args.get("message", "")
+
     if "user_id" in session and get_user_apartment_id(session.get("user_id")) is not None:
         apartment_id = get_user_apartment_id(session.get("user_id"))
         if apartment_has_units(apartment_id):
             return redirect(url_for("dashboard"))
         return redirect(url_for("setup_units"))
-    
-    return render_template("login.html", step="email", error=None)
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "").strip()
+
+        row = validate_user(username, password)
+        if not row:
+            app.logger.warning(f"LOGIN FAILED: username={username}")
+            return render_template(
+                "login.html",
+                error="Invalid username or password",
+                message=login_message,
+            )
+
+        session.clear()
+        session["user_id"] = int(row["user_id"])
+        session["username"] = row["username"]
+        session["display_name"] = row["display_name"]
+        session["role"] = row["role"]
+        session["apartment_id"] = row["apartment_id"]
+
+        app.logger.info(f"LOGIN SUCCESS: user_id={row['user_id']}, username={username}")
+
+        if row["apartment_id"] is None:
+            return redirect(url_for("setup"))
+        if not apartment_has_units(int(row["apartment_id"])):
+            return redirect(url_for("setup_units"))
+        return redirect(url_for("dashboard"))
+
+    return render_template("login.html", error=None, message=login_message)
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        step = request.form.get("step", "email")
+
+        if step == "email":
+            email_address = request.form.get("email_address", "").strip().lower()
+            if "@" not in email_address or "." not in email_address:
+                return render_template(
+                    "forgot_password.html",
+                    step="email",
+                    error="Enter a valid email address",
+                    message=None,
+                    email_address="",
+                )
+
+            user = get_user_by_email(email_address)
+            if not user:
+                return render_template(
+                    "forgot_password.html",
+                    step="email",
+                    error="Email not found.",
+                    message=None,
+                    email_address="",
+                )
+
+            if not create_otp_session(email_address):
+                return render_template(
+                    "forgot_password.html",
+                    step="email",
+                    error="Failed to send OTP. Please try again.",
+                    message=None,
+                    email_address="",
+                )
+
+            session["reset_email"] = email_address
+            session["reset_otp_verified"] = False
+            return render_template(
+                "forgot_password.html",
+                step="otp",
+                error=None,
+                message=f"OTP sent to {email_address}. Valid for {OTP_VALIDITY_MINUTES} minutes.",
+                email_address=email_address,
+            )
+
+        if step == "otp":
+            email_address = session.get("reset_email", "").strip()
+            otp_code = request.form.get("otp_code", "").strip()
+
+            if not email_address:
+                return render_template(
+                    "forgot_password.html",
+                    step="email",
+                    error="Session expired. Start again.",
+                    message=None,
+                    email_address="",
+                )
+
+            if len(otp_code) != OTP_LENGTH or not otp_code.isdigit():
+                return render_template(
+                    "forgot_password.html",
+                    step="otp",
+                    error=f"OTP must be {OTP_LENGTH} digits",
+                    message=None,
+                    email_address=email_address,
+                )
+
+            if not verify_otp(email_address, otp_code):
+                return render_template(
+                    "forgot_password.html",
+                    step="otp",
+                    error="Invalid or expired OTP.",
+                    message=None,
+                    email_address=email_address,
+                )
+
+            session["reset_otp_verified"] = True
+            return render_template(
+                "forgot_password.html",
+                step="reset",
+                error=None,
+                message="OTP verified. Set your new password.",
+                email_address=email_address,
+            )
+
+        if step == "reset":
+            email_address = session.get("reset_email", "").strip()
+            otp_verified = bool(session.get("reset_otp_verified"))
+            new_password = request.form.get("new_password", "").strip()
+            confirm_password = request.form.get("confirm_password", "").strip()
+
+            if not email_address or not otp_verified:
+                return render_template(
+                    "forgot_password.html",
+                    step="email",
+                    error="Session expired. Start again.",
+                    message=None,
+                    email_address="",
+                )
+
+            if len(new_password) < 4:
+                return render_template(
+                    "forgot_password.html",
+                    step="reset",
+                    error="Password must be at least 4 characters.",
+                    message=None,
+                    email_address=email_address,
+                )
+
+            if new_password != confirm_password:
+                return render_template(
+                    "forgot_password.html",
+                    step="reset",
+                    error="Password and confirm password must match.",
+                    message=None,
+                    email_address=email_address,
+                )
+
+            if not update_user_password_by_email(email_address, new_password):
+                return render_template(
+                    "forgot_password.html",
+                    step="reset",
+                    error="Unable to reset password. Try again.",
+                    message=None,
+                    email_address=email_address,
+                )
+
+            session.pop("reset_email", None)
+            session.pop("reset_otp_verified", None)
+            app.logger.info(f"PASSWORD RESET SUCCESS: email={email_address}")
+            return redirect(url_for("login", message="Password reset successful. Please login."))
+
+    return render_template(
+        "forgot_password.html",
+        step="email",
+        error=None,
+        message=None,
+        email_address="",
+    )
 
 
 @app.route("/logout")
