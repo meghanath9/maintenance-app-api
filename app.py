@@ -1513,6 +1513,11 @@ def get_user_by_contact(email_address: str, mobile_number: str) -> dict | None:
             (usr.role IN ('admin', 'unit_owner') AND lower(trim(unit.resident_email)) = ?)
             OR (usr.role = 'tenant' AND lower(trim(unit.tenant_email)) = ?)
         )
+        ORDER BY CASE usr.role
+            WHEN 'unit_owner' THEN 1
+            WHEN 'tenant' THEN 2
+            ELSE 3
+        END
         """,
         (email_address.lower().strip(), email_address.lower().strip()),
     ).fetchall()
