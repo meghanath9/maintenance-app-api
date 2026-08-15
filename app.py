@@ -145,7 +145,11 @@ def init_db() -> None:
             unit_id INTEGER PRIMARY KEY AUTOINCREMENT,
             unit_number TEXT NOT NULL,
             resident_name TEXT NOT NULL,
+            resident_mobile TEXT NOT NULL DEFAULT '',
+            resident_email TEXT NOT NULL DEFAULT '',
             tenant_name TEXT,
+            tenant_mobile TEXT NOT NULL DEFAULT '',
+            tenant_email TEXT NOT NULL DEFAULT '',
             monthly_maintenance REAL NOT NULL,
             apartment_id INTEGER,
             FOREIGN KEY (apartment_id) REFERENCES apartments(apartment_id)
@@ -221,6 +225,10 @@ def init_db() -> None:
     ensure_column(conn, "users", "apartment_id", "INTEGER")
     ensure_column(conn, "units", "apartment_id", "INTEGER")
     ensure_column(conn, "units", "tenant_name", "TEXT")
+    ensure_column(conn, "units", "resident_mobile", "TEXT NOT NULL DEFAULT ''")
+    ensure_column(conn, "units", "resident_email", "TEXT NOT NULL DEFAULT ''")
+    ensure_column(conn, "units", "tenant_mobile", "TEXT NOT NULL DEFAULT ''")
+    ensure_column(conn, "units", "tenant_email", "TEXT NOT NULL DEFAULT ''")
     ensure_column(conn, "payments", "apartment_id", "INTEGER")
     ensure_column(conn, "expenditures", "apartment_id", "INTEGER")
     ensure_column(conn, "income", "apartment_id", "INTEGER")
@@ -543,7 +551,11 @@ def replace_apartment_units(
     floors: int,
     units_per_floor: int,
     owner_names: list[str],
+    owner_mobiles: list[str],
+    owner_emails: list[str],
     tenant_names: list[str],
+    tenant_mobiles: list[str],
+    tenant_emails: list[str],
 ) -> None:
     conn = get_conn()
     try:
@@ -566,13 +578,19 @@ def replace_apartment_units(
             for unit in range(1, units_per_floor + 1):
                 unit_number = f"{floor}{unit:02d}"
                 resident_name = owner_names[owner_index]
+                resident_mobile = owner_mobiles[owner_index]
+                resident_email = owner_emails[owner_index]
                 tenant_name = tenant_names[owner_index] if owner_index < len(tenant_names) else ""
+                tenant_mobile = tenant_mobiles[owner_index] if owner_index < len(tenant_mobiles) else ""
+                tenant_email = tenant_emails[owner_index] if owner_index < len(tenant_emails) else ""
                 conn.execute(
                     """
-                    INSERT INTO units (unit_number, resident_name, tenant_name, monthly_maintenance, apartment_id)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO units (
+                        unit_number, resident_name, resident_mobile, resident_email,
+                        tenant_name, tenant_mobile, tenant_email, monthly_maintenance, apartment_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (unit_number, resident_name, tenant_name, default_amount, apartment_id),
+                    (unit_number, resident_name, resident_mobile, resident_email, tenant_name, tenant_mobile, tenant_email, default_amount, apartment_id),
                 )
                 owner_index += 1
 
@@ -586,18 +604,19 @@ def replace_apartment_units(
 
 def update_apartment_units_occupancy(
     apartment_id: int,
-    unit_updates: list[tuple[str, str, int]],
+    unit_updates: list[tuple[str, str, str, str, str, str, int]],
 ) -> None:
     conn = get_conn()
     try:
-        for owner_name, tenant_name, unit_id in unit_updates:
+        for owner_name, owner_mobile, owner_email, tenant_name, tenant_mobile, tenant_email, unit_id in unit_updates:
             conn.execute(
                 """
                 UPDATE units
-                SET resident_name = ?, tenant_name = ?
+                SET resident_name = ?, resident_mobile = ?, resident_email = ?,
+                    tenant_name = ?, tenant_mobile = ?, tenant_email = ?
                 WHERE unit_id = ? AND apartment_id = ?
                 """,
-                (owner_name, tenant_name, unit_id, apartment_id),
+                (owner_name, owner_mobile, owner_email, tenant_name, tenant_mobile, tenant_email, unit_id, apartment_id),
             )
         conn.commit()
     except Exception:
@@ -611,7 +630,8 @@ def get_units_for_apartment(apartment_id: int) -> list[sqlite3.Row]:
     conn = get_conn()
     rows = conn.execute(
         """
-         SELECT unit_id, unit_number, resident_name, tenant_name, monthly_maintenance,
+         SELECT unit_id, unit_number, resident_name, resident_mobile, resident_email,
+             tenant_name, tenant_mobile, tenant_email, monthly_maintenance,
              COALESCE(NULLIF(tenant_name, ''), resident_name) AS occupant_name
         FROM units
         WHERE apartment_id = ?
@@ -1751,7 +1771,11 @@ def setup_units():
             units_per_floor="",
             unit_labels=[],
             owner_names=[],
+            owner_mobiles=[],
+            owner_emails=[],
             tenant_names=[],
+            tenant_mobiles=[],
+            tenant_emails=[],
         )
 
     step = request.form.get("step", "counts")
@@ -1790,11 +1814,19 @@ def setup_units():
             units_per_floor=units_per_floor,
             unit_labels=unit_labels,
             owner_names=["" for _ in unit_labels],
+            owner_mobiles=["" for _ in unit_labels],
+            owner_emails=["" for _ in unit_labels],
             tenant_names=["" for _ in unit_labels],
+            tenant_mobiles=["" for _ in unit_labels],
+            tenant_emails=["" for _ in unit_labels],
         )
 
     owner_names = [request.form.get(f"owner_name_{index}", "").strip() for index in range(len(unit_labels))]
+    owner_mobiles = [request.form.get(f"owner_mobile_{index}", "").strip() for index in range(len(unit_labels))]
+    owner_emails = [request.form.get(f"owner_email_{index}", "").strip().lower() for index in range(len(unit_labels))]
     tenant_names = [request.form.get(f"tenant_name_{index}", "").strip() for index in range(len(unit_labels))]
+    tenant_mobiles = [request.form.get(f"tenant_mobile_{index}", "").strip() for index in range(len(unit_labels))]
+    tenant_emails = [request.form.get(f"tenant_email_{index}", "").strip().lower() for index in range(len(unit_labels))]
     if any(not name for name in owner_names):
         return render_template(
             "setup_units.html",
@@ -1805,10 +1837,58 @@ def setup_units():
             units_per_floor=units_per_floor,
             unit_labels=unit_labels,
             owner_names=owner_names,
+            owner_mobiles=owner_mobiles,
+            owner_emails=owner_emails,
             tenant_names=tenant_names,
+            tenant_mobiles=tenant_mobiles,
+            tenant_emails=tenant_emails,
         )
 
-    replace_apartment_units(apartment_id, floors, units_per_floor, owner_names, tenant_names)
+    if any(not mobile for mobile in owner_mobiles):
+        return render_template(
+            "setup_units.html",
+            apartment_name=get_apartment_name_by_id(apartment_id),
+            error="Enter mobile number for every owner.",
+            step="owners",
+            floors=floors,
+            units_per_floor=units_per_floor,
+            unit_labels=unit_labels,
+            owner_names=owner_names,
+            owner_mobiles=owner_mobiles,
+            owner_emails=owner_emails,
+            tenant_names=tenant_names,
+            tenant_mobiles=tenant_mobiles,
+            tenant_emails=tenant_emails,
+        )
+
+    if any(not email or "@" not in email for email in owner_emails):
+        return render_template(
+            "setup_units.html",
+            apartment_name=get_apartment_name_by_id(apartment_id),
+            error="Enter a valid email address for every owner.",
+            step="owners",
+            floors=floors,
+            units_per_floor=units_per_floor,
+            unit_labels=unit_labels,
+            owner_names=owner_names,
+            owner_mobiles=owner_mobiles,
+            owner_emails=owner_emails,
+            tenant_names=tenant_names,
+            tenant_mobiles=tenant_mobiles,
+            tenant_emails=tenant_emails,
+        )
+
+    replace_apartment_units(
+        apartment_id,
+        floors,
+        units_per_floor,
+        owner_names,
+        owner_mobiles,
+        owner_emails,
+        tenant_names,
+        tenant_mobiles,
+        tenant_emails,
+    )
     return redirect(url_for("dashboard"))
 
 
@@ -2031,18 +2111,26 @@ def manage_units():
     if request.method == "POST":
         try:
             units = get_units_for_apartment(apartment_id)
-            updates: list[tuple[str, str, int]] = []
+            updates: list[tuple[str, str, str, str, str, str, int]] = []
 
             for unit in units:
                 unit_id = int(unit["unit_id"])
                 unit_number = unit["unit_number"]
                 owner_name = request.form.get(f"owner_name_{unit_id}", "").strip()
+                owner_mobile = request.form.get(f"owner_mobile_{unit_id}", "").strip()
+                owner_email = request.form.get(f"owner_email_{unit_id}", "").strip().lower()
                 tenant_name = request.form.get(f"tenant_name_{unit_id}", "").strip()
+                tenant_mobile = request.form.get(f"tenant_mobile_{unit_id}", "").strip()
+                tenant_email = request.form.get(f"tenant_email_{unit_id}", "").strip().lower()
 
                 if not owner_name:
                     raise ValueError(f"Owner name is required for unit {unit_number}")
+                if not owner_mobile:
+                    raise ValueError(f"Owner mobile number is required for unit {unit_number}")
+                if "@" not in owner_email:
+                    raise ValueError(f"Valid owner email is required for unit {unit_number}")
 
-                updates.append((owner_name, tenant_name, unit_id))
+                updates.append((owner_name, owner_mobile, owner_email, tenant_name, tenant_mobile, tenant_email, unit_id))
 
             update_apartment_units_occupancy(apartment_id, updates)
             message = "Unit owner and tenant details updated successfully."

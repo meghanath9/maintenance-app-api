@@ -84,7 +84,7 @@
 <body>
   <form class="panel" method="post" action="/setup/units">
     <h1>Apartment Structure Setup</h1>
-    <p>{{ apartment_name }}: define floors, units, owner names, and optional tenant names before opening the dashboard.</p>
+    <p>{{ apartment_name }}: define floors, units, and owner and tenant contact details before opening the dashboard.</p>
 
     {% if step == "counts" %}
       <div class="grid">
@@ -103,12 +103,16 @@
       <input type="hidden" name="step" value="owners" />
       <input type="hidden" name="floors" value="{{ floors }}" />
       <input type="hidden" name="units_per_floor" value="{{ units_per_floor }}" />
-      <p>Enter owner name for each unit and tenant name only if rented.</p>
+      <p>Enter owner contact details for each unit. Tenant details are optional.</p>
       {% for label in unit_labels %}
         <div class="owner-row">
           <strong>Unit {{ label }}</strong>
           <input name="owner_name_{{ loop.index0 }}" type="text" value="{{ owner_names[loop.index0] }}" placeholder="Owner name" required />
+          <input name="owner_mobile_{{ loop.index0 }}" type="tel" value="{{ owner_mobiles[loop.index0] }}" placeholder="Owner mobile number" required style="margin-top:8px;" />
+          <input name="owner_email_{{ loop.index0 }}" type="email" value="{{ owner_emails[loop.index0] }}" placeholder="Owner email address" required style="margin-top:8px;" />
           <input name="tenant_name_{{ loop.index0 }}" type="text" value="{{ tenant_names[loop.index0] }}" placeholder="Tenant name (optional)" style="margin-top:8px;" />
+          <input name="tenant_mobile_{{ loop.index0 }}" type="tel" value="{{ tenant_mobiles[loop.index0] }}" placeholder="Tenant mobile (optional)" style="margin-top:8px;" />
+          <input name="tenant_email_{{ loop.index0 }}" type="email" value="{{ tenant_emails[loop.index0] }}" placeholder="Tenant email (optional)" style="margin-top:8px;" />
         </div>
       {% endfor %}
       <button type="submit">Save Apartment Structure</button>
